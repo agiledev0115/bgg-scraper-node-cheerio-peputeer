@@ -1,0 +1,78 @@
+const cheerio = require('cheerio');
+const mongoose = require('mongoose');
+const dotenv = require('dotenv');
+dotenv.config();
+
+const hostname = process.env.MONGO_HOSTNAME;
+const database = process.env.MONGO_DATABASE_NAME;
+const debugging = process.env.DEBUGGING;
+
+const GameModel = require('./src/models/Game');
+const GameDetails = require('./src/clients/GameDetails');
+const CatalogueParser = require('./src/parsers/Catalogue');
+const utils = require('./src/utils');
+
+const catalogue = new CatalogueParser([]);
+const gameDetails = new GameDetails();
+
+//mongoose.connect('mongodb://localhost:27017/meteor', { useNewUrlParser: true });
+//console.log('mongodb://'+hostname+':'+portnumber+'/'+database);
+// should we handle username and password? mongoose.connect('mongodb://username:password@'hostname':'portnumber'/'database, { useNewUrlParser: true });
+//mongoose.connect('mongodb://'+hostname+':'+portnumber+'/'+database, { useNewUrlParser: true, useFindAndModify: true });
+mongoose.connect('mongodb://testing:abcdefghijklmn0p33@192.168.1.200:49153/' , { useNewUrlParser: true, useFindAndModify: true });
+
+const db = mongoose.connection;
+
+db.on('error', e => console.error("Database not connected: " + e));
+db.once('open', () => console.log("Database connected OK"));
+
+
+if(debugging == ' true'){
+    console.log("Running in debug mode.");
+
+    // console.log("Dropping database...");
+    // db.dropDatabase((err, result) => {
+    //     if(!err) console.log("Database dropped.")
+    // });
+}
+
+const boardGameGeekPagePromises = []
+
+for (let i = 1300; i < (debugging == 'true' ? 5 : 1); i--){
+    boardGameGeekPagePromises.push(new Promise((resolve, reject) => utils.delay(i * 10000).then(() => gameDetails.getGamesList(i)
+        .then(games => {
+            console.log("OK - fetching page ", i)
+            const html = cheerio.load(games.data);
+            return Promise.all(catalogue.parse(html).map(game => 
+                gameDetails.getGameDetails(game).then(data => new GameModel(
+                        data.objectid,
+                        data.name,
+                        data.yearpublished,
+                        data.minplayers,
+                        data.maxplayers,
+                        data.playingtime,
+                        data.minplaytime,
+                        data.maxplaytime,
+                        data.age,
+                        data.description,
+                        data.thumbnail,
+                        data.image,//Removed as BGG has string AND arrays in this field
+                        data.boardgameartist,
+                        data.boardgamemechanic,
+                        data.boardgamepublisher,
+                        data.boardgamecategory,
+                        data.boardgamedesigner
+                    ).save()
+                ))).then(boardGameGeekPageGames => resolve(boardGameGeekPageGames)
+            );
+        })
+        .catch(e => {
+            console.log(e);
+            console.log("Failed - re-trying page ", i)
+            return boardGameGeekPagePromises.push(gameDetails.getGamesList(i));
+        }))))
+}
+
+Promise.all(boardGameGeekPagePromises).then(() => {
+    mongoose.connection.close()
+});
