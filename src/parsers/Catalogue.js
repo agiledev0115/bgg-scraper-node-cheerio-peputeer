@@ -7,35 +7,19 @@ class Catalogue {
         return $('[title="last page"]').toArray()[0].children[0].data.replace('[','').replace(']','');
     }
 
-    parse($) {
+    async parse(page) {
         let games = [];
-        const data = $('.collection_table > tbody > tr > td').toArray();
-        const pageGameCount = data.length / 7;
+        const gameLinks = await page.$$('.collection_table > tbody > tr > td.collection_thumbnail > a')
+        
+        const gameCount = gameLinks.length;
+        for (let i = 0; i < gameCount; i ++) {
+            let link = sanitize(await gameLinks[i].evaluate(node => node.getAttribute('href')))
 
-        games.push(
-            new CatalogueGameModel(
-                sanitize($(data[0]).text()),
-                sanitize($(data[2]).text()).replace('(', ' ('),
-                sanitize($(data[3]).text()),
-                sanitize($(data[4]).text()),
-                sanitize($(data[5]).text()),
-                "https://boardgamegeek.com" + sanitize($(data[2]).find('a').attr('href')),
-            )
-        );
-
-        for (let i = 1; i < pageGameCount; i++) {
+            let bggid = link.split('/')[2];
             games.push(
-                new CatalogueGameModel(
-                    sanitize($(data[0 + (7 * i)]).text()),
-                    sanitize($(data[2 + (7 * i)]).text()).replace('(', ' ('),
-                    sanitize($(data[3 + (7 * i)]).text()),
-                    sanitize($(data[4 + (7 * i)]).text()),
-                    sanitize($(data[5 + (7 * i)]).text()),
-                    "https://boardgamegeek.com" + sanitize($(data[2 + (7 * i)]).find('a').attr('href')),
-                )
-            );
+                new CatalogueGameModel(bggid, "https://boardgamegeek.com" + link)
+            )
         }
-
         return games;
     }
 }

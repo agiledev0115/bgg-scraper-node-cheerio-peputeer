@@ -49,6 +49,8 @@ const schema = new mongoose.Schema({
     thumbnail: String,
     image: String,
     yearPublished: String,
+    modified: Date,
+    pulled: Boolean,
     gameArtists: [GameArtistSchema],
     gameMechanics: [GameMechanicSchema],
     gamePublishers: [GamePublisherSchema],
@@ -115,19 +117,55 @@ class Game {
         this.gameCategories = parseGenericObjectIntoDomain(gameCategories, GameCategory);
         this.gameDesigners = parseGenericObjectIntoDomain(gameDesigners, GameDesigner);
         this.alternativeNames = parseGenericObjectIntoDomain(title, AlternativeName);
+        this.pulled = false;
     }
 
-    async save(){
-        let data = await MongooseGame.findOneAndUpdate({ bggid: this.bggid }, this, {new: true});
+    async save() {
+        let data = await MongooseGame.findOne({ bggid: this.bggid })
 
         if(data) {
-            //console.log('-updating entry for id:'+this.bggid);
-            //return MongooseGame.updateOne({ bggid: this.bggid }, this);
+            if( data.title != this.title ||
+                data.yearPublished != this.yearPublished ||
+                data.minPlayers != this.minPlayers ||
+                data.maxPlayers != this.maxPlayers ||
+                data.playingTime != this.playingTime ||
+                data.minPlaytime != this.minPlaytime ||
+                data.maxPlaytime != this.maxPlaytime ||
+                data.age != this.age ||
+                data.description != this.description ||
+                data.thumbnail != this.thumbnail ||
+                data.image != this.image ||
+                !data.modified
+            ) {
+                this.modified = new Date()
+                console.log('---updating entry for id: ' + this.bggid)
+                return MongooseGame.updateOne({ bggid: this.bggid }, this)
+            }
             return;
-        };
+        }
 
-        console.log('---creating new entry for id:'+this.bggid);
+        console.log('---creating new entry for id: ' + this.bggid)
+        this.modified = new Date();
         return new MongooseGame(this).save();
+    }
+
+    async check(period) {
+        let data = await MongooseGame.findOne({ bggid: this.bggid })
+
+        if(data) {
+            if(data.modified == undefined)
+                return true;
+
+            const d = new Date(data.modified)
+            const now = new Date()
+            d.setDate(d.getDate() + period)
+
+            if(now > d)
+                return true;
+            return 0;
+        }
+
+        return true;
     }
 }
 
